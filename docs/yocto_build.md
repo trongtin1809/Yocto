@@ -163,7 +163,134 @@ Chạy màn hình debug:
 Cắm nguồn cho Raspberry Pi, đợi vài giây, nếu thành công sẽ thấy Raspberry Pi bắt đầu Boot.
 Tên người dùng mặc định là root.
 
+Tạo meta-layer cho Yocto Distro
+===============================
 
+Tạo folder chứa Yocto:
+-----------------------
 
+Từ thư mục Poky:
+	~$ cd source oe-init-build-env
+	~$ bitbake-layers create-layer <đường dẫn muốn tạo>
+	
+Ví dụ ở đây sẽ tạo một meta-layer tên meta-customer nằm trong thư mục layers chứa trong thư mục Poky:
+	~$ bitbake-layers create-layer ../layers/meta-customer
 
+Bên trong thư mục meta-customer sẽ chứa các file cơ bản của một meta-layers như layer.conf, bản sao của chứng nhận MIT,...
+Bước cuối cùng là thêm đường dẫn của meta-layer vừa tạo vào file bblayers.conf tại Poky/build/conf. File bblayers.conf sau khi bổ sung sẽ trông như sau:
+	# POKY_BBLAYERS_CONF_VERSION is increased each time build/conf/bblayers.conf
+	# changes incompatibly
+	POKY_BBLAYERS_CONF_VERSION = "2"
 
+	BBPATH = "${TOPDIR}"
+	BBFILES ?= ""
+
+	BBLAYERS ?= " \
+	  /home/tin/kirkstone/poky/meta \
+	  /home/tin/kirkstone/poky/meta-poky \
+	  /home/tin/kirkstone/poky/meta-yocto-bsp \
+	  /home/tin/kirkstone/poky/meta-raspberrypi \
+	  /home/tin/kirkstone/poky/layers/meta-customer \ #vừa thêm vào
+	  "
+Tạo recipe cho Meta-layer
+==========================
+
+Sau khi tạo thành công meta-layer, lúc này layer vừa tạo là một layer rỗng, ta tiến hành thêm các recipe mong muốn vào.
+
+Tạo thư mục chứa recipe
+------------------------
+
+Đầu tiên, từ poky:
+	~$ cd layers/meta-customer/
+	~$ mkdir -p recipes-customer/hello-world/hello-world
+
+Tạo file recipe (.bb)
+---------------------
+
+	~$ cd recipes-customer/hello-world/
+	~$ >> <filerecipe>.bb
+
+Ví dụ ở đây sẽ tạo recipe hello world:
+	~$ >> hello-world_1.0.0.bb
+
+Bên trong file recipe này, chèn đoạn khai báo như sau:
+
+	# Package summary
+	SUMMARY = "Hello World" #1
+	# License, for example MIT
+	LICENSE = "MIT"
+	# License checksum file is always required
+	LIC_FILES_CHKSUM = "file://${COREBASE}/meta/files/common-licenses/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
+
+	# C source from local file
+	SRC_URI = "file://hello-world.c" #2
+
+	# Set LDFLAGS options provided by the build system
+	TARGET_CC_ARCH += "${LDFLAGS}"
+
+	# Change source directory to workdirectory where C source is
+	S = "${WORKDIR}"
+
+	# Compile hello-world from sources, no Makefile
+	do_compile() {
+	    ${CXX} -Wall hello-world.c -o hello-world #3
+	}
+
+	# Install binary to final directory /usr/bin
+	do_install() {
+	    install -d ${D}${bindir}
+	    install -m 0755 ${S}/hello-world ${D}${bindir} #4
+	}
+	
+Với các recipe khác, ta chỉ cần thay đổi các dòng có comment số, ví dụ như:
+	SUMMARY = "ledblink application"
+	SECTION = "examples"
+	LICENSE = "MIT"
+	LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
+
+	SRC_URI = "file://ledblink.c"
+
+	TARGET_CC_ARCH += "${LDFLAGS}"
+
+	S = "${WORKDIR}"
+
+	do_compile() {
+		     ${CC} ledblink.c -o ledblink ${LDFLAGS}
+	}
+
+	do_install() {
+		     install -d ${D}${bindir}
+		     install -m 0755 ledblink ${D}${bindir}
+	}
+
+Thêm source file vào recipe
+---------------------------
+
+Từ folder lúc nãy:
+	~$ cd hello-world
+	~$ >> hello-world.c
+	
+Sau đó trong file c vừa tạo, ta thêm source code vào:
+	#include <stdio.h>
+
+	int main(int argc, char *argv[]){
+	    printf("Hello world!\n");
+	    return 0;
+	}
+
+Để compile file source vừa thêm, ta chạy lệnh:
+	~$ cd source oe-init-build-env
+	~$ bitbake hello-world
+
+Thêm recipe vừa tạo vào image ở những lần build sau:
+-----------------------------------------------------
+
+Bước cuối cùng là thêm recipe vừa tạo vào những lần build sau. Ta chỉ đơn giản thêm 1 dòng vào file local.conf trong build/conf như sau:
+	IMAGE_INSTALL_append = "<TênRecipe>"
+
+Ví dụ:
+	IMAGE_INSTALL_append = " hello-world"
+
+Sau đó tiến hành build lại file image:
+	~$ bitbake rpi-test-image
+	
